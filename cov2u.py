@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-# call as: python cov2u.py cov.nc
+# call as: python cov2u.py ch cov_file n_draws
+# EXAMPLE:  python cov2u.py 
+# EXAMPLE:  python cov2u.py 37 cov.nc 2000
 
 # =======================================
 # Version 0.1
@@ -9,63 +11,66 @@
 # michael.taylor AT reading DOT ac DOT uk
 # =======================================
 
-import os
-import os.path
-from os import fsync, remove
-import glob
-import optparse
 from  optparse import OptionParser
-import sys
 import numpy as np
 import scipy.linalg as la
 import xarray
-import seaborn as sns; sns.set(style="darkgrid")
-import matplotlib.pyplot as plt; plt.close("all")
 
 def calc_cov2u(N, Xmean, Xcov):
     '''
-    Routine to estimate uncertainty from a covariance matrix using Monte Carlo sampling from the underlying distribution. Code adapted from routine coded by Jonathan Mittaz.
+    Routine to estimate uncertainty from a covariance matrix using Monte Carlo sampling from the underlying distribution. Code adapted from routine coded by Jonathan Mittaz: get_harm.py
     '''
+
+    Xmean = np.array([0.,0.])
+    Xcov = np.array([[0.04, 0.112] , [0.112, 0.64]])
+    
+    uncert = np.array([[0.2,0.],[0.,0.8]])
+    # correl = np.array([[1.,0.7],[0.7,1.]])
+    # cov = np.matmul(uncert,correl)
+    # orig_cov = np.matmul(cov,uncert)
+    # Xcov = np.copy(orig_cov)
+    print('U(target)=', uncert)
 
     eigenval, eigenvec = np.linalg.eig(Xcov)
     R = eigenvec
     S = np.diag(np.sqrt(eigenval))
     T = np.matmul(R,S)
-    output = np.random.multivariate_normal(Xmean,Xcov,size=N)
+    output = np.random.multivariate_normal(Xmean, Xcov, size=N)
     ndims = len(Xcov.shape)
-    position = np.zeros((size,ndims))
-    final = np.zeros((size,ndims))
+    position = np.zeros((N, ndims))
+    final = np.zeros((N, ndims))
     for j in range(ndims):
         position[:,:] = 0.
-        position[:,j] = np.random.normal(size=N,loc=0.,scale=1.)
+        position[:,j] = np.random.normal(size=N, loc=0., scale=1.)
         for i in range(position.shape[0]):
             vector = position[i,:]
             ovector = np.matmul(T,vector)
             final[i,:] = final[i,:]+ovector
 
-    U = np.std(ovector, axis=0)
+    U = np.std(final, axis=0)
 
     return U
 
 if __name__ == "__main__":
 
     #----------------------------------------------
-    # parser = OptionParser("usage: %prog ch cov_file")
-    # (options, args) = parser.parse_args()
-
-    # ch = args[0]
-    # cov_file = args[1]
-
-    ch = 37
-    cov_file = 'FIDUCEO_Harmonisation_Data_' + str(ch) + '.nc'
-
-    ds = xarray.open_dataset(cov_file)
-
-    Xave = ds.parameter
-    Xcov = ds.covariance_matrix
-    U = calc_cov2u(N,Xave,Xcov)
+    parser = OptionParser("usage: %prog ch cov_file n_draws")
+    (options, args) = parser.parse_args()    
+    try:
+        ch = args[0]
+        cov_file = args[1]
+        N = args[2]
+    except:
+        ch = 37
+        cov_file = 'FIDUCEO_Harmonisation_Data_' + str(ch) + '.nc'
+        N = 2000
     
-    print('Uncertainty=', U)
+    ds = xarray.open_dataset(cov_file)
+    Xave = ds.parameter
+    Xcov = ds.parameter_covariance_matrix
+    U = calc_cov2u(N, Xave, Xcov)
+    
+    print('U(estimate)=', np.diag(U))
     print('** end')
 
 
